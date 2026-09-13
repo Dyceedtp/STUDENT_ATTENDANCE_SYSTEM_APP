@@ -39,7 +39,6 @@ if menu == "Dashboard":
     st.title("Institutional Analytics")
     st.write("Overview of system statistics, attendance trends, and real-time activity tracking.")
     
-    # Fetch real counts from database for a fresh state
     total_students = 0
     try:
         conn = get_db_connection()
@@ -53,7 +52,6 @@ if menu == "Dashboard":
     except Exception:
         total_students = 0
 
-    # Top Metric Cards
     col1, col2, col3 = st.columns(3)
     
     with col1:
@@ -66,7 +64,6 @@ if menu == "Dashboard":
     st.markdown("---")
     st.subheader("Recent Activity")
     
-    # Fresh app state: Empty recent activity log
     try:
         conn = get_db_connection()
         cursor = conn.cursor()
@@ -92,7 +89,6 @@ elif menu == "Registration":
     st.title("Student Biometric Enrollment")
     st.write("Register new student profiles and capture facial biometric templates.")
     
-    # Split layout matching Figure 5.2
     form_col, capture_col = st.columns(2)
     
     with form_col:
@@ -110,7 +106,6 @@ elif menu == "Registration":
         camera_image = st.camera_input("Capture Template")
         st.caption("Template will be converted to 128-d biometric vector for security.")
 
-    # Form Submission Handling
     if submit_button:
         if matric_number and department and camera_image:
             try:
@@ -133,29 +128,49 @@ elif menu == "Registration":
 elif menu == "Live Capture":
     st.title("Real-Time Attendance Capture")
     
-    # Top Control Bar matching Figure 5.4
-    control_col1, control_col2 = st.columns([3, 1])
+    # Initialize session state to track start/stop toggle state
+    if 'session_active' not in st.session_state:
+        st.session_state.session_active = False
+
+    # Control Bar layout with Start and Stop buttons side-by-side
+    control_col1, control_col2, control_col3 = st.columns([2, 1, 1])
     with control_col1:
         course_session = st.selectbox(
             "Select Course Session",
             ["Introduction to AI (COM 312)", "Data Structures (COM 311)", "Operating Systems (COM 321)"]
         )
     with control_col2:
-        st.write("") # spacing
-        stop_btn = st.button("Stop Session", type="primary")
-        
-    st.info(f"Active session ready for: **{course_session}**. Click start or initialize the OpenCV stream.")
-    
-    # Video Feed Container Placeholder
-    st.markdown(
-        """
-        <div style="background-color: #0e1117; padding: 40px; border-radius: 10px; text-align: center; border: 1px solid #303545;">
-            <h3 style="color: #a3a8b8;">[ Live OpenCV Video Stream Window ]</h3>
-            <p style="color: #64748b;">● Waiting for camera stream initialization...</p>
-        </div>
-        """, 
-        unsafe_allow_html=True
-    )
+        st.write("") # vertical alignment spacing
+        if st.button("Start Session", type="primary", use_container_width=True):
+            st.session_state.session_active = True
+    with control_col3:
+        st.write("") # vertical alignment spacing
+        if st.button("Stop Session", use_container_width=True):
+            st.session_state.session_active = False
+
+    # Conditional UI updates based on session state
+    if st.session_state.session_active:
+        st.success(f"Active session running for: **{course_session}**. OpenCV video stream is active.")
+        st.markdown(
+            """
+            <div style="background-color: #0e1117; padding: 40px; border-radius: 10px; text-align: center; border: 1px solid #22c55e;">
+                <h3 style="color: #22c55e;">[ Live OpenCV Video Stream Active ]</h3>
+                <p style="color: #4ade80;">● Biometric face detection running...</p>
+            </div>
+            """, 
+            unsafe_allow_html=True
+        )
+    else:
+        st.info(f"Session ready for: **{course_session}**. Click **Start Session** to initialize the OpenCV stream.")
+        st.markdown(
+            """
+            <div style="background-color: #0e1117; padding: 40px; border-radius: 10px; text-align: center; border: 1px solid #303545;">
+                <h3 style="color: #a3a8b8;">[ Live OpenCV Video Stream Window ]</h3>
+                <p style="color: #64748b;">● Waiting for session to start...</p>
+            </div>
+            """, 
+            unsafe_allow_html=True
+        )
 
 # ==========================================
 # 4. ATTENDANCE REPORTS & LOGS
@@ -163,7 +178,6 @@ elif menu == "Live Capture":
 elif menu == "Session Reports":
     st.title("Attendance Reports")
     
-    # Filter Bar matching Figure 5.4 bottom layout
     filter_col1, filter_col2, filter_col3, filter_col4 = st.columns([2, 1, 1, 1])
     
     with filter_col1:
@@ -178,7 +192,6 @@ elif menu == "Session Reports":
         
     st.markdown("---")
     
-    # Fresh app state: Dynamic database load with zero records fallback
     try:
         conn = get_db_connection()
         cursor = conn.cursor()
