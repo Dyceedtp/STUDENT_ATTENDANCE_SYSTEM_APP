@@ -21,6 +21,45 @@ def get_db_connection():
         ssl_disabled=False
     )
 
+# Automatically create required tables if they don't exist yet
+def init_db():
+    try:
+        conn = get_db_connection()
+        cursor = conn.cursor()
+        cursor.execute("""
+            CREATE TABLE IF NOT EXISTS students (
+                id INT AUTO_INCREMENT PRIMARY KEY,
+                matric_number VARCHAR(50) NOT NULL,
+                department VARCHAR(100) NOT NULL
+            )
+        """)
+        cursor.execute("""
+            CREATE TABLE IF NOT EXISTS attendance_logs (
+                id INT AUTO_INCREMENT PRIMARY KEY,
+                timestamp DATETIME DEFAULT CURRENT_TIMESTAMP,
+                matric_number VARCHAR(50) NOT NULL,
+                course VARCHAR(100) NOT NULL,
+                status VARCHAR(50) NOT NULL
+            )
+        """)
+        cursor.execute("""
+            CREATE TABLE IF NOT EXISTS attendance_records (
+                id INT AUTO_INCREMENT PRIMARY KEY,
+                date DATE NOT NULL,
+                matric_number VARCHAR(50) NOT NULL,
+                course VARCHAR(100) NOT NULL,
+                time_in TIME NOT NULL
+            )
+        """)
+        conn.commit()
+        cursor.close()
+        conn.close()
+    except Exception as e:
+        st.error(f"Table Initialization Error: {e}")
+
+# Initialize tables on startup
+init_db()
+
 # Sidebar Navigation matching your documentation
 st.sidebar.title("Polytechnic")
 st.sidebar.caption("INTELLIGENT ATTENDANCE v2.0")
@@ -112,8 +151,7 @@ elif menu == "Registration":
             try:
                 conn = get_db_connection()
                 cursor = conn.cursor()
-                # Updated to match typical column name 'matric' if 'matric_number' threw an error
-                query = "INSERT INTO students (matric, department) VALUES (%s, %s)"
+                query = "INSERT INTO students (matric_number, department) VALUES (%s, %s)"
                 cursor.execute(query, (matric_number, department))
                 conn.commit()
                 cursor.close()
@@ -132,7 +170,7 @@ elif menu == "Registration":
 
     try:
         conn = get_db_connection()
-        query = "SELECT id, matric, department FROM students"
+        query = "SELECT id, matric_number, department FROM students"
         df_students = pd.read_sql(query, conn)
         conn.close()
 
@@ -142,7 +180,7 @@ elif menu == "Registration":
             edited_df = st.data_editor(
                 df_students,
                 column_config={"Select": st.column_config.CheckboxColumn(required=True)},
-                disabled=["id", "matric", "department"],
+                disabled=["id", "matric_number", "department"],
                 hide_index=True,
                 use_container_width=True
             )
