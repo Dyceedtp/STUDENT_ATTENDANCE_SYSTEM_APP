@@ -10,7 +10,7 @@ st.set_page_config(
     layout="wide"
 )
 
-# Aiven MySQL Database Connection using Streamlit Secrets (Prevents GitHub password blocks)
+# Aiven MySQL Database Connection using Streamlit Secrets (Securely configured)
 def get_db_connection():
     return mysql.connector.connect(
         host=st.secrets["mysql"]["host"],
