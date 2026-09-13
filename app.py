@@ -112,7 +112,8 @@ elif menu == "Registration":
             try:
                 conn = get_db_connection()
                 cursor = conn.cursor()
-                query = "INSERT INTO students (matric_number, department) VALUES (%s, %s)"
+                # Updated to match typical column name 'matric' if 'matric_number' threw an error
+                query = "INSERT INTO students (matric, department) VALUES (%s, %s)"
                 cursor.execute(query, (matric_number, department))
                 conn.commit()
                 cursor.close()
@@ -131,7 +132,7 @@ elif menu == "Registration":
 
     try:
         conn = get_db_connection()
-        query = "SELECT id, matric_number, department FROM students"
+        query = "SELECT id, matric, department FROM students"
         df_students = pd.read_sql(query, conn)
         conn.close()
 
@@ -141,7 +142,7 @@ elif menu == "Registration":
             edited_df = st.data_editor(
                 df_students,
                 column_config={"Select": st.column_config.CheckboxColumn(required=True)},
-                disabled=["id", "matric_number", "department"],
+                disabled=["id", "matric", "department"],
                 hide_index=True,
                 use_container_width=True
             )
