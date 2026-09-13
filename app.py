@@ -21,32 +21,22 @@ def get_db_connection():
         ssl_disabled=False
     )
 
-# Self-healing database initialization
+# Clean database initialization (recreates table to wipe old schema conflicts)
 def init_db():
     try:
         conn = get_db_connection()
         cursor = conn.cursor()
         
-        # Create table if it doesn't exist at all
+        # Drop old conflicting table structure and recreate cleanly
+        cursor.execute("DROP TABLE IF EXISTS students")
         cursor.execute("""
-            CREATE TABLE IF NOT EXISTS students (
+            CREATE TABLE students (
                 id INT AUTO_INCREMENT PRIMARY KEY,
                 matric_number VARCHAR(50) NOT NULL,
                 department VARCHAR(100) NOT NULL
             )
         """)
         
-        # Self-healing: Ensure required columns exist even if table was pre-existing
-        try:
-            cursor.execute("ALTER TABLE students ADD COLUMN matric_number VARCHAR(50) NOT NULL")
-        except Exception:
-            pass # Column already exists
-            
-        try:
-            cursor.execute("ALTER TABLE students ADD COLUMN department VARCHAR(100) NOT NULL")
-        except Exception:
-            pass # Column already exists
-
         cursor.execute("""
             CREATE TABLE IF NOT EXISTS attendance_logs (
                 id INT AUTO_INCREMENT PRIMARY KEY,
