@@ -21,14 +21,20 @@ def get_db_connection():
         ssl_disabled=False
     )
 
-# Clean database initialization (recreates table to wipe old schema conflicts)
+# Clean database initialization with foreign key check bypass
 def init_db():
     try:
         conn = get_db_connection()
         cursor = conn.cursor()
         
-        # Drop old conflicting table structure and recreate cleanly
+        # Disable foreign key checks to allow clean drops
+        cursor.execute("SET FOREIGN_KEY_CHECKS = 0;")
+        
         cursor.execute("DROP TABLE IF EXISTS students")
+        cursor.execute("DROP TABLE IF EXISTS attendance")
+        cursor.execute("DROP TABLE IF EXISTS attendance_logs")
+        cursor.execute("DROP TABLE IF EXISTS attendance_records")
+        
         cursor.execute("""
             CREATE TABLE students (
                 id INT AUTO_INCREMENT PRIMARY KEY,
@@ -38,7 +44,7 @@ def init_db():
         """)
         
         cursor.execute("""
-            CREATE TABLE IF NOT EXISTS attendance_logs (
+            CREATE TABLE attendance_logs (
                 id INT AUTO_INCREMENT PRIMARY KEY,
                 timestamp DATETIME DEFAULT CURRENT_TIMESTAMP,
                 matric_number VARCHAR(50) NOT NULL,
@@ -48,7 +54,7 @@ def init_db():
         """)
         
         cursor.execute("""
-            CREATE TABLE IF NOT EXISTS attendance_records (
+            CREATE TABLE attendance_records (
                 id INT AUTO_INCREMENT PRIMARY KEY,
                 date DATE NOT NULL,
                 matric_number VARCHAR(50) NOT NULL,
@@ -57,6 +63,7 @@ def init_db():
             )
         """)
         
+        cursor.execute("SET FOREIGN_KEY_CHECKS = 1;")
         conn.commit()
         cursor.close()
         conn.close()
@@ -292,8 +299,7 @@ elif menu == "Session Reports":
         conn = get_db_connection()
         cursor = conn.cursor()
         cursor.execute("SELECT date, matric_number, course, time_in FROM attendance_records")
-        records = cursor.fetchall()
-        cursor.close()
+        records = cursor.fetchall()        cursor.close()
         conn.close()
         
         if records:
