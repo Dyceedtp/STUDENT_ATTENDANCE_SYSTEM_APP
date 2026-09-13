@@ -10,14 +10,14 @@ st.set_page_config(
     layout="wide"
 )
 
-# Aiven MySQL Database Connection Function (Configured with your live credentials)
+# Aiven MySQL Database Connection using Streamlit Secrets (Prevents GitHub password blocks)
 def get_db_connection():
     return mysql.connector.connect(
-        host="mysql-c346193-fawwazunusa-6c9b.e.aivencloud.com",
-        user="avnadmin",
-        password="AVNS_rI0ryEk9VWgFyEBLAWd",
-        database="defaultdb",
-        port=14852,
+        host=st.secrets["mysql"]["host"],
+        user=st.secrets["mysql"]["user"],
+        password=st.secrets["mysql"]["password"],
+        database=st.secrets["mysql"]["database"],
+        port=int(st.secrets["mysql"]["port"]),
         ssl_disabled=False
     )
 
