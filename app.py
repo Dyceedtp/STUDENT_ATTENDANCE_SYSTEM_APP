@@ -153,16 +153,43 @@ elif navigation == "Registration":
 
 # Live Capture View
 elif navigation == "Live Capture":
-    st.title("Live Face Recognition Capture")
-    st.markdown("Use camera feed to detect and mark attendance automatically.")
-    st.info("Camera stream interface active. Ensure webcam permissions are enabled.")
+    st.title("Live Face Recognition & Attendance")
+    st.markdown("Capture a snapshot and log student attendance to the database.")
     
     picture = st.camera_input("Take a snapshot for recognition")
+    
+    with st.form("attendance_checkin_form"):
+        att_student_id = st.text_input("Enter Student ID to Mark Present")
+        mark_btn = st.form_submit_button("Mark Attendance")
+        
+        if mark_btn:
+            if att_student_id:
+                conn = get_db_connection()
+                if conn:
+                    try:
+                        cursor = conn.cursor()
+                        # Verify student exists first
+                        cursor.execute("SELECT full_name FROM students WHERE student_id = %s", (att_student_id,))
+                        student = cursor.fetchone()
+                        
+                        if student:
+                            cursor.execute("INSERT INTO attendance (student_id) VALUES (%s)", (att_student_id,))
+                            conn.commit()
+                            st.success(f"Attendance marked successfully for {student[0]} (ID: {att_student_id})!")
+                        else:
+                            st.error(f"Student ID '{att_student_id}' not found in registered database. Please register first.")
+                        
+                        cursor.close()
+                        conn.close()
+                    except mysql.connector.Error as err:
+                        st.error(f"Attendance Error: {err}")
+            else:
+                st.warning("Please enter a valid Student ID.")
+
     if picture:
         bytes_data = picture.getvalue()
         cv_img = cv2.imdecode(np.frombuffer(bytes_data, np.uint8), cv2.IMREAD_COLOR)
         st.image(cv_img, channels="BGR", caption="Captured Frame")
-        st.success("Frame captured successfully. Processing facial features...")
 
 # Session Reports View
 elif navigation == "Session Reports":
@@ -184,7 +211,7 @@ elif navigation == "Session Reports":
                 csv = df.to_csv(index=False).encode('utf-8')
                 st.download_button("Download Report as CSV", data=csv, file_name="attendance_report.csv", mime="text/csv")
             else:
-                st.info("No attendance logs available for export yet.")
+                st.info("No attendance logs available for export yet. Use Live Capture to log attendance.")
         except Exception as e:
             st.error(f"Error generating report: {e}")
 
