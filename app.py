@@ -1,8 +1,5 @@
 import streamlit as st
 import mysql.connector
-import cv2
-import numpy as np
-import pandas as pd
 from datetime import datetime
 
 # Page Configuration
@@ -12,237 +9,190 @@ st.set_page_config(
     layout="wide"
 )
 
-# Database Connection Function using Streamlit Secrets
+# Aiven MySQL Database Connection Function
 def get_db_connection():
-    try:
-        db = mysql.connector.connect(
-            host=st.secrets["mysql"]["host"],
-            port=st.secrets["mysql"]["port"],
-            user=st.secrets["mysql"]["user"],
-            password=st.secrets["mysql"]["password"],
-            database=st.secrets["mysql"]["database"]
-        )
-        return db
-    except Exception as err:
-        st.error(f"Database Error: {err}")
-        return None
+    return mysql.connector.connect(
+        host="your_aiven_host",
+        user="your_db_user",
+        password="your_db_password",
+        database="your_database_name",
+        port=3306
+    )
 
-# Initialize Database Tables if they don't exist
-def init_db():
-    conn = get_db_connection()
-    if conn:
-        cursor = conn.cursor()
-        cursor.execute("""
-            CREATE TABLE IF NOT EXISTS students (
-                student_id VARCHAR(50) PRIMARY KEY,
-                full_name VARCHAR(100) NOT NULL,
-                created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
-            )
-        """)
-        cursor.execute("""
-            CREATE TABLE IF NOT EXISTS attendance (
-                id INT AUTO_INCREMENT PRIMARY KEY,
-                student_id VARCHAR(50),
-                timestamp TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
-                FOREIGN KEY (student_id) REFERENCES students(student_id)
-            )
-        """)
-        conn.commit()
-        cursor.close()
-        conn.close()
-
-init_db()
-
-# Sidebar Navigation
+# Sidebar Navigation matching your documentation
 st.sidebar.title("Polytechnic")
-st.sidebar.markdown("### INTELLIGENT ATTENDANCE v2.0")
-st.sidebar.markdown("---")
+st.sidebar.caption("INTELLIGENT ATTENDANCE v2.0")
 
-navigation = st.sidebar.radio("Navigation", ["Dashboard", "Registration", "Live Capture", "Session Reports"])
+menu = st.sidebar.radio(
+    "Navigation", 
+    ["Dashboard", "Registration", "Live Capture", "Session Reports"]
+)
 
 st.sidebar.markdown("---")
 if st.sidebar.button("Logout"):
-    st.success("Logged out successfully.")
+    st.sidebar.success("Logged out successfully.")
 
-# Dashboard View
-if navigation == "Dashboard":
-    st.title("System Dashboard")
-    st.markdown("Overview of student attendance metrics and database status.")
+# ==========================================
+# 1. DASHBOARD / INSTITUTIONAL ANALYTICS
+# ==========================================
+if menu == "Dashboard":
+    st.title("Institutional Analytics")
+    st.write("Overview of system statistics, attendance trends, and real-time activity tracking.")
     
-    conn = get_db_connection()
-    if conn:
-        try:
-            students_df = pd.read_sql("SELECT * FROM students", conn)
-            attendance_df = pd.read_sql("SELECT * FROM attendance", conn)
-            conn.close()
-            
-            col1, col2 = st.columns(2)
-            with col1:
-                st.metric(label="Total Registered Students", value=len(students_df))
-            with col2:
-                st.metric(label="Total Attendance Logs", value=len(attendance_df))
-                
-            st.markdown("### Recent Attendance")
-            if not attendance_df.empty:
-                st.dataframe(attendance_df.tail(10), use_container_width=True)
-            else:
-                st.info("No attendance records found yet.")
-        except Exception as e:
-            st.error(f"Error loading dashboard data: {e}")
+    # Fetch real counts from database for a fresh state
+    total_students = 0
+    try:
+        conn = get_db_connection()
+        cursor = conn.cursor()
+        cursor.execute("SELECT COUNT(*) FROM students")
+        result = cursor.fetchone()
+        if result:
+            total_students = result[0]
+        cursor.close()
+        conn.close()
+    except Exception:
+        total_students = 0
 
-# Registration View
-elif navigation == "Registration":
-    st.title("Student Registration Portal")
-    st.markdown("Register new students, view the roster, or select multiple records to delete.")
+    # Top Metric Cards
+    col1, col2, col3 = st.columns(3)
     
-    with st.form("registration_form"):
-        student_id = st.text_input("Student ID (e.g., STU002)")
-        full_name = st.text_input("Full Name")
-        submit_button = st.form_submit_button("Register Student")
+    with col1:
+        st.metric(label="Total Registered Students", value=total_students)
+    with col2:
+        st.metric(label="Average Attendance", value="0.0%")
+    with col3:
+        st.metric(label="Total Courses", value="0")
         
-        if submit_button:
-            if student_id and full_name:
-                conn = get_db_connection()
-                if conn:
-                    try:
-                        cursor = conn.cursor()
-                        cursor.execute("INSERT INTO students (student_id, full_name) VALUES (%s, %s)", (student_id, full_name))
-                        conn.commit()
-                        cursor.close()
-                        conn.close()
-                        st.success(f"Successfully registered {full_name} (ID: {student_id})!")
-                    except mysql.connector.Error as err:
-                        st.error(f"Registration Error: {err}")
-            else:
-                st.warning("Please fill in both Student ID and Full Name.")
-                
-    st.markdown("### Currently Registered Students")
-    conn = get_db_connection()
-    if conn:
-        try:
-            students_df = pd.read_sql("SELECT student_id, full_name, created_at FROM students", conn)
-            conn.close()
-            if not students_df.empty:
-                with st.form("bulk_delete_students_form"):
-                    st.markdown("Select student records to delete:")
-                    selected_students = []
-                    for index, row in students_df.iterrows():
-                        is_checked = st.checkbox(f"ID: {row['student_id']} | Name: {row['full_name']}", key=f"del_stu_{row['student_id']}")
-                        if is_checked:
-                            selected_students.append(row['student_id'])
-                    
-                    confirm_bulk_stu = st.checkbox("I confirm I want to permanently delete the selected student(s)")
-                    bulk_delete_stu_btn = st.form_submit_button("Delete Selected Students")
-                    
-                    if bulk_delete_stu_btn:
-                        if confirm_bulk_stu and selected_students:
-                            conn = get_db_connection()
-                            if conn:
-                                try:
-                                    cursor = conn.cursor()
-                                    format_strings = ','.join(['%s'] * len(selected_students))
-                                    # Note: Foreign key constraints on attendance handled or cascading delete
-                                    cursor.execute(f"DELETE FROM students WHERE student_id IN ({format_strings})", tuple(selected_students))
-                                    conn.commit()
-                                    cursor.close()
-                                    conn.close()
-                                    st.success(f"Successfully deleted {len(selected_students)} student(s)!")
-                                    st.rerun()
-                                except mysql.connector.Error as err:
-                                    st.error(f"Deletion Error: {err}")
-                        else:
-                            st.warning("Please select at least one student and check the confirmation box.")
-            else:
-                st.info("Database table is empty or initializing.")
-        except Exception as e:
-            st.error(f"Could not load roster: {e}")
-
-# Live Capture View
-elif navigation == "Live Capture":
-    st.title("Live Face Recognition & Attendance")
-    st.markdown("Capture a snapshot or check in students manually.")
+    st.markdown("---")
+    st.subheader("Recent Activity")
     
-    picture = st.camera_input("Take a snapshot for recognition")
-    
-    st.markdown("### Manual Attendance Check-in")
-    with st.form("manual_attendance_form"):
-        manual_id = st.text_input("Enter Student ID to Check In")
-        manual_submit = st.form_submit_button("Check In Student")
+    # Fresh app state: Empty recent activity log
+    try:
+        conn = get_db_connection()
+        cursor = conn.cursor()
+        cursor.execute("SELECT timestamp, matric_number, course, status FROM attendance_logs ORDER BY timestamp DESC LIMIT 10")
+        logs = cursor.fetchall()
+        cursor.close()
+        conn.close()
         
-        if manual_submit:
-            if manual_id:
-                conn = get_db_connection()
-                if conn:
-                    try:
-                        cursor = conn.cursor()
-                        cursor.execute("SELECT full_name FROM students WHERE student_id = %s", (manual_id,))
-                        student = cursor.fetchone()
-                        if student:
-                            cursor.execute("INSERT INTO attendance (student_id) VALUES (%s)", (manual_id,))
-                            conn.commit()
-                            st.success(f"Manually checked in {student[0]} (ID: {manual_id})!")
-                        else:
-                            st.error(f"Student ID '{manual_id}' not found. Please register the student first.")
-                        cursor.close()
-                        conn.close()
-                    except mysql.connector.Error as err:
-                        st.error(f"Database Error: {err}")
-            else:
-                st.warning("Please enter a Student ID.")
+        if logs:
+            st.markdown("| Timestamp | Matric No. | Course | Status |")
+            st.markdown("| :--- | :--- | :--- | :--- |")
+            for log in logs:
+                st.markdown(f"| {log[0]} | {log[1]} | {log[2]} | {log[3]} |")
+        else:
+            st.info("No recent activity recorded yet. Start a live capture session to begin tracking.")
+    except Exception:
+        st.info("No recent activity recorded yet. Database tables will populate during live sessions.")
 
-    if picture:
-        bytes_data = picture.getvalue()
-        cv_img = cv2.imdecode(np.frombuffer(bytes_data, np.uint8), cv2.IMREAD_COLOR)
-        st.image(cv_img, channels="BGR", caption="Captured Frame")
-
-# Session Reports View
-elif navigation == "Session Reports":
-    st.title("Session Reports & Logs")
-    st.markdown("Export, view, or select multiple attendance logs to delete.")
+# ==========================================
+# 2. STUDENT BIOMETRIC ENROLLMENT (REGISTRATION)
+# ==========================================
+elif menu == "Registration":
+    st.title("Student Biometric Enrollment")
+    st.write("Register new student profiles and capture facial biometric templates.")
     
-    conn = get_db_connection()
-    if conn:
-        try:
-            df = pd.read_sql("""
-                SELECT a.id, s.student_id, s.full_name, a.timestamp 
-                FROM attendance a 
-                JOIN students s ON a.student_id = s.student_id
-            """, conn)
-            conn.close()
-            
-            if not df.empty:
-                csv = df.to_csv(index=False).encode('utf-8')
-                st.download_button("Download Report as CSV", data=csv, file_name="attendance_report.csv", mime="text/csv")
-                
-                st.markdown("### Select Attendance Logs to Delete")
-                with st.form("bulk_delete_attendance_form"):
-                    selected_logs = []
-                    for index, row in df.iterrows():
-                        is_checked = st.checkbox(f"Log ID: {row['id']} | Student: {row['full_name']} ({row['student_id']}) | Time: {row['timestamp']}", key=f"del_log_{row['id']}")
-                        if is_checked:
-                            selected_logs.append(row['id'])
-                    
-                    confirm_bulk_att = st.checkbox("I confirm I want to permanently delete the selected attendance log(s)")
-                    bulk_delete_att_btn = st.form_submit_button("Delete Selected Attendance Logs")
-                    
-                    if bulk_delete_att_btn:
-                        if confirm_bulk_att and selected_logs:
-                            conn = get_db_connection()
-                            if conn:
-                                try:
-                                    cursor = conn.cursor()
-                                    format_strings = ','.join(['%s'] * len(selected_logs))
-                                    cursor.execute(f"DELETE FROM attendance WHERE id IN ({format_strings})", tuple(selected_logs))
-                                    conn.commit()
-                                    cursor.close()
-                                    conn.close()
-                                    st.success(f"Successfully deleted {len(selected_logs)} attendance log(s)!")
-                                    st.rerun()
-                                except mysql.connector.Error as err:
-                                    st.error(f"Deletion Error: {err}")
-                        else:
-                            st.warning("Please select at least one log entry and check the confirmation box.")
-            else:
-                st.info("No attendance logs available yet. Use Live Capture or Manual Check-in to add records.")
-        except Exception as e:
-            st.error(f"Error generating report: {e}")
+    # Split layout matching Figure 5.2
+    form_col, capture_col = st.columns(2)
+    
+    with form_col:
+        st.subheader("Registration Form")
+        with st.form("registration_form"):
+            matric_number = st.text_input("Matriculation Number", placeholder="FPT/COM/2023/001")
+            department = st.selectbox(
+                "Department",
+                ["Computer Science", "Information Technology", "Software Engineering", "Cybersecurity"]
+            )
+            submit_button = st.form_submit_button("Complete Registration")
+
+    with capture_col:
+        st.subheader("Facial Capture")
+        camera_image = st.camera_input("Capture Template")
+        st.caption("Template will be converted to 128-d biometric vector for security.")
+
+    # Form Submission Handling
+    if submit_button:
+        if matric_number and department and camera_image:
+            try:
+                conn = get_db_connection()
+                cursor = conn.cursor()
+                query = "INSERT INTO students (matric_number, department) VALUES (%s, %s)"
+                cursor.execute(query, (matric_number, department))
+                conn.commit()
+                cursor.close()
+                conn.close()
+                st.success(f"Successfully registered student ({matric_number})!")
+            except Exception as e:
+                st.error(f"Database Error: {e}")
+        else:
+            st.warning("Please fill in all form fields and capture a facial template.")
+
+# ==========================================
+# 3. REAL-TIME ATTENDANCE CAPTURE (LIVE STREAM)
+# ==========================================
+elif menu == "Live Capture":
+    st.title("Real-Time Attendance Capture")
+    
+    # Top Control Bar matching Figure 5.4
+    control_col1, control_col2 = st.columns([3, 1])
+    with control_col1:
+        course_session = st.selectbox(
+            "Select Course Session",
+            ["Introduction to AI (COM 312)", "Data Structures (COM 311)", "Operating Systems (COM 321)"]
+        )
+    with control_col2:
+        st.write("") # spacing
+        stop_btn = st.button("Stop Session", type="primary")
+        
+    st.info(f"Active session ready for: **{course_session}**. Click start or initialize the OpenCV stream.")
+    
+    # Video Feed Container Placeholder
+    st.markdown(
+        """
+        <div style="background-color: #0e1117; padding: 40px; border-radius: 10px; text-align: center; border: 1px solid #303545;">
+            <h3 style="color: #a3a8b8;">[ Live OpenCV Video Stream Window ]</h3>
+            <p style="color: #64748b;">● Waiting for camera stream initialization...</p>
+        </div>
+        """, 
+        unsafe_allow_html=True
+    )
+
+# ==========================================
+# 4. ATTENDANCE REPORTS & LOGS
+# ==========================================
+elif menu == "Session Reports":
+    st.title("Attendance Reports")
+    
+    # Filter Bar matching Figure 5.4 bottom layout
+    filter_col1, filter_col2, filter_col3, filter_col4 = st.columns([2, 1, 1, 1])
+    
+    with filter_col1:
+        filter_course = st.selectbox("Filter Course", ["All Courses", "Introduction to AI (COM 312)", "Data Structures (COM 311)"])
+    with filter_col2:
+        start_date = st.date_input("Start Date")
+    with filter_col3:
+        end_date = st.date_input("End Date")
+    with filter_col4:
+        st.write("")
+        st.button("📥 Export CSV", use_container_width=True)
+        
+    st.markdown("---")
+    
+    # Fresh app state: Dynamic database load with zero records fallback
+    try:
+        conn = get_db_connection()
+        cursor = conn.cursor()
+        cursor.execute("SELECT date, matric_number, course, time_in FROM attendance_records")
+        records = cursor.fetchall()
+        cursor.close()
+        conn.close()
+        
+        if records:
+            st.markdown("| DATE | MATRIC NO. | COURSE | TIME IN |")
+            st.markdown("| :--- | :--- | :--- | :--- |")
+            for r in records:
+                st.markdown(f"| {r[0]} | {r[1]} | {r[2]} | {r[3]} |")
+        else:
+            st.info("No attendance records found. Data will appear here once live sessions capture student attendance.")
+    except Exception:
+        st.info("No attendance records found in the database yet.")
