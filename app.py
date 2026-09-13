@@ -21,6 +21,44 @@ def get_db_connection():
         ssl_disabled=False
     )
 
+# Force-create correct tables on startup
+def init_db():
+    try:
+        conn = get_db_connection()
+        cursor = conn.cursor()
+        cursor.execute("""
+            CREATE TABLE IF NOT EXISTS students (
+                id INT AUTO_INCREMENT PRIMARY KEY,
+                matric_number VARCHAR(50) NOT NULL,
+                department VARCHAR(100) NOT NULL
+            )
+        """)
+        cursor.execute("""
+            CREATE TABLE IF NOT EXISTS attendance_logs (
+                id INT AUTO_INCREMENT PRIMARY KEY,
+                timestamp DATETIME DEFAULT CURRENT_TIMESTAMP,
+                matric_number VARCHAR(50) NOT NULL,
+                course VARCHAR(100) NOT NULL,
+                status VARCHAR(50) NOT NULL
+            )
+        """)
+        cursor.execute("""
+            CREATE TABLE IF NOT EXISTS attendance_records (
+                id INT AUTO_INCREMENT PRIMARY KEY,
+                date DATE NOT NULL,
+                matric_number VARCHAR(50) NOT NULL,
+                course VARCHAR(100) NOT NULL,
+                time_in TIME NOT NULL
+            )
+        """)
+        conn.commit()
+        cursor.close()
+        conn.close()
+    except Exception as e:
+        st.error(f"Database Init Error: {e}")
+
+init_db()
+
 # Sidebar Navigation
 st.sidebar.title("Polytechnic")
 st.sidebar.caption("INTELLIGENT ATTENDANCE v2.0")
@@ -112,16 +150,6 @@ elif menu == "Registration":
             try:
                 conn = get_db_connection()
                 cursor = conn.cursor()
-                
-                # Automatically ensure table exists before insert
-                cursor.execute("""
-                    CREATE TABLE IF NOT EXISTS students (
-                        id INT AUTO_INCREMENT PRIMARY KEY,
-                        matric_number VARCHAR(50) NOT NULL,
-                        department VARCHAR(100) NOT NULL
-                    )
-                """)
-                
                 query = "INSERT INTO students (matric_number, department) VALUES (%s, %s)"
                 cursor.execute(query, (matric_number, department))
                 conn.commit()
@@ -186,7 +214,7 @@ elif menu == "Registration":
         else:
             st.info("No student records found in the database.")
     except Exception:
-        st.info("Database table is not initialized or empty yet. Register your first student above to create it automatically.")
+        st.info("Database table is not initialized or empty yet.")
 
 # ==========================================
 # 3. REAL-TIME ATTENDANCE CAPTURE (LIVE STREAM)
