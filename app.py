@@ -167,7 +167,7 @@ elif navigation == "Live Capture":
 # Session Reports View
 elif navigation == "Session Reports":
     st.title("Session Reports & Logs")
-    st.markdown("Export and view comprehensive attendance logs.")
+    st.markdown("Export, view, or manage attendance logs.")
     
     conn = get_db_connection()
     if conn:
@@ -184,6 +184,28 @@ elif navigation == "Session Reports":
                 csv = df.to_csv(index=False).encode('utf-8')
                 st.download_button("Download Report as CSV", data=csv, file_name="attendance_report.csv", mime="text/csv")
             else:
-                st.info("No attendance logs available for export.")
+                st.info("No attendance logs available for export yet.")
         except Exception as e:
             st.error(f"Error generating report: {e}")
+
+    st.markdown("### Manage / Remove Attendance Logs")
+    with st.form("delete_attendance_form"):
+        log_id_to_delete = st.number_input("Enter Attendance Log ID to Delete", min_value=1, step=1)
+        confirm_del_attendance = st.checkbox("I confirm I want to permanently delete this attendance log")
+        del_attendance_btn = st.form_submit_button("Delete Attendance Log")
+        
+        if del_attendance_btn:
+            if confirm_del_attendance and log_id_to_delete:
+                conn = get_db_connection()
+                if conn:
+                    try:
+                        cursor = conn.cursor()
+                        cursor.execute("DELETE FROM attendance WHERE id = %s", (log_id_to_delete,))
+                        conn.commit()
+                        cursor.close()
+                        conn.close()
+                        st.success(f"Successfully deleted attendance log ID: {log_id_to_delete}!")
+                    except mysql.connector.Error as err:
+                        st.error(f"Deletion Error: {err}")
+            else:
+                st.warning("Please specify a valid Log ID and check the confirmation box.")
