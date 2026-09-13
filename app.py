@@ -21,7 +21,7 @@ def get_db_connection():
         ssl_disabled=False
     )
 
-# Clean database initialization with foreign key check bypass
+# Clean database initialization with foreign key check bypass and image storage
 def init_db():
     try:
         conn = get_db_connection()
@@ -30,16 +30,17 @@ def init_db():
         # Disable foreign key checks to allow clean drops
         cursor.execute("SET FOREIGN_KEY_CHECKS = 0;")
         
-        cursor.execute("DROP TABLE IF EXISTS students")
         cursor.execute("DROP TABLE IF EXISTS attendance")
         cursor.execute("DROP TABLE IF EXISTS attendance_logs")
         cursor.execute("DROP TABLE IF EXISTS attendance_records")
+        cursor.execute("DROP TABLE IF EXISTS students")
         
         cursor.execute("""
             CREATE TABLE students (
                 id INT AUTO_INCREMENT PRIMARY KEY,
                 matric_number VARCHAR(50) NOT NULL,
-                department VARCHAR(100) NOT NULL
+                department VARCHAR(100) NOT NULL,
+                face_data LONGBLOB
             )
         """)
         
@@ -141,39 +142,46 @@ elif menu == "Registration":
     st.title("Student Biometric Enrollment")
     st.write("Register new student profiles and manage registered records.")
     
+    # Using session state to hold the camera input across form submission
+    if "camera_image" not in st.session_state:
+        st.session_state.camera_image = None
+
     form_col, capture_col = st.columns(2)
     
     with form_col:
         st.subheader("Registration Form")
-        with st.form("registration_form"):
-            matric_number = st.text_input("Matriculation Number", placeholder="FPT/COM/2023/001")
-            department = st.selectbox(
-                "Department",
-                ["Computer Science", "Information Technology", "Software Engineering", "Cybersecurity"]
-            )
-            submit_button = st.form_submit_button("Complete Registration")
+        matric_number = st.text_input("Matriculation Number", placeholder="FPT/COM/2023/001")
+        department = st.selectbox(
+            "Department",
+            ["Computer Science", "Information Technology", "Software Engineering", "Cybersecurity"]
+        )
 
     with capture_col:
         st.subheader("Facial Capture")
-        camera_image = st.camera_input("Capture Template")
+        st.session_state.camera_image = st.camera_input("Capture Template")
         st.caption("Template will be converted to 128-d biometric vector for security.")
 
+    submit_button = st.button("Complete Registration", type="primary")
+
     if submit_button:
-        if matric_number and department and camera_image:
+        if matric_number and department and st.session_state.camera_image:
             try:
+                # Read image bytes from the camera input
+                image_bytes = st.session_state.camera_image.getvalue()
+                
                 conn = get_db_connection()
                 cursor = conn.cursor()
-                query = "INSERT INTO students (matric_number, department) VALUES (%s, %s)"
-                cursor.execute(query, (matric_number, department))
+                query = "INSERT INTO students (matric_number, department, face_data) VALUES (%s, %s, %s)"
+                cursor.execute(query, (matric_number, department, image_bytes))
                 conn.commit()
                 cursor.close()
                 conn.close()
-                st.success(f"Successfully registered student ({matric_number})!")
-                st.rerun()
+                
+                st.success(f"Successfully registered student ({matric_number}) with biometric template!")
             except Exception as e:
                 st.error(f"Database Error: {e}")
         else:
-            st.warning("Please fill in all form fields and capture a facial template.")
+            st.warning("Please fill in all form fields and capture a facial photo using the camera before submitting.")
 
     # --- BULK DELETE / MANAGEMENT SECTION ---
     st.markdown("---")
@@ -197,7 +205,7 @@ elif menu == "Registration":
                 use_container_width=True
             )
 
-            if st.button("🗑️ Delete Selected Students", type="primary"):
+            if st.button("🗑️ Delete Selected Students", type="secondary"):
                 selected_rows = edited_df[edited_df["Select"] == True]
                 
                 if not selected_rows.empty:
