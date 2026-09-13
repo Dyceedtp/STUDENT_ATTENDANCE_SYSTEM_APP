@@ -76,8 +76,6 @@ if navigation == "Dashboard":
             attendance_df = pd.read_sql("SELECT * FROM attendance", conn)
             conn.close()
             
-            col1, col2 = st.metrics = st.columns(2) if hasattr(st, "columns") else (st, st)
-            
             col1, col2 = st.columns(2)
             with col1:
                 st.metric(label="Total Registered Students", value=len(students_df))
@@ -130,6 +128,28 @@ elif navigation == "Registration":
                 st.info("Database table is empty or initializing.")
         except Exception as e:
             st.error(f"Could not load roster: {e}")
+
+    st.markdown("### Manage / Remove Records")
+    with st.form("delete_form"):
+        del_student_id = st.text_input("Enter Student ID to Delete")
+        confirm_delete = st.checkbox("I confirm I want to permanently delete this student record")
+        delete_button = st.form_submit_button("Delete Student")
+        
+        if delete_button:
+            if confirm_delete and del_student_id:
+                conn = get_db_connection()
+                if conn:
+                    try:
+                        cursor = conn.cursor()
+                        cursor.execute("DELETE FROM students WHERE student_id = %s", (del_student_id,))
+                        conn.commit()
+                        cursor.close()
+                        conn.close()
+                        st.success(f"Successfully deleted student ID: {del_student_id}!")
+                    except mysql.connector.Error as err:
+                        st.error(f"Deletion Error: {err}")
+            else:
+                st.warning("Please enter a Student ID and check the confirmation box.")
 
 # Live Capture View
 elif navigation == "Live Capture":
