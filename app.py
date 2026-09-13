@@ -93,7 +93,7 @@ if navigation == "Dashboard":
 # Registration View
 elif navigation == "Registration":
     st.title("Student Registration Portal")
-    st.markdown("Register new students, view the roster, or delete individual student records.")
+    st.markdown("Register new students, view the roster, or select multiple records to delete.")
     
     with st.form("registration_form"):
         student_id = st.text_input("Student ID (e.g., STU002)")
@@ -123,68 +123,72 @@ elif navigation == "Registration":
             students_df = pd.read_sql("SELECT student_id, full_name, created_at FROM students", conn)
             conn.close()
             if not students_df.empty:
-                st.dataframe(students_df, use_container_width=True)
+                with st.form("bulk_delete_students_form"):
+                    st.markdown("Select student records to delete:")
+                    selected_students = []
+                    for index, row in students_df.iterrows():
+                        is_checked = st.checkbox(f"ID: {row['student_id']} | Name: {row['full_name']}", key=f"del_stu_{row['student_id']}")
+                        if is_checked:
+                            selected_students.append(row['student_id'])
+                    
+                    confirm_bulk_stu = st.checkbox("I confirm I want to permanently delete the selected student(s)")
+                    bulk_delete_stu_btn = st.form_submit_button("Delete Selected Students")
+                    
+                    if bulk_delete_stu_btn:
+                        if confirm_bulk_stu and selected_students:
+                            conn = get_db_connection()
+                            if conn:
+                                try:
+                                    cursor = conn.cursor()
+                                    format_strings = ','.join(['%s'] * len(selected_students))
+                                    # Note: Foreign key constraints on attendance handled or cascading delete
+                                    cursor.execute(f"DELETE FROM students WHERE student_id IN ({format_strings})", tuple(selected_students))
+                                    conn.commit()
+                                    cursor.close()
+                                    conn.close()
+                                    st.success(f"Successfully deleted {len(selected_students)} student(s)!")
+                                    st.rerun()
+                                except mysql.connector.Error as err:
+                                    st.error(f"Deletion Error: {err}")
+                        else:
+                            st.warning("Please select at least one student and check the confirmation box.")
             else:
                 st.info("Database table is empty or initializing.")
         except Exception as e:
             st.error(f"Could not load roster: {e}")
 
-    st.markdown("### Manage / Remove Records")
-    with st.form("delete_form"):
-        del_student_id = st.text_input("Enter Student ID to Delete")
-        confirm_delete = st.checkbox("I confirm I want to permanently delete this student record")
-        delete_button = st.form_submit_button("Delete Student")
-        
-        if delete_button:
-            if confirm_delete and del_student_id:
-                conn = get_db_connection()
-                if conn:
-                    try:
-                        cursor = conn.cursor()
-                        cursor.execute("DELETE FROM students WHERE student_id = %s", (del_student_id,))
-                        conn.commit()
-                        cursor.close()
-                        conn.close()
-                        st.success(f"Successfully deleted student ID: {del_student_id}!")
-                    except mysql.connector.Error as err:
-                        st.error(f"Deletion Error: {err}")
-            else:
-                st.warning("Please enter a Student ID and check the confirmation box.")
-
 # Live Capture View
 elif navigation == "Live Capture":
     st.title("Live Face Recognition & Attendance")
-    st.markdown("Capture a snapshot and log student attendance to the database.")
+    st.markdown("Capture a snapshot or check in students manually.")
     
     picture = st.camera_input("Take a snapshot for recognition")
     
-    with st.form("attendance_checkin_form"):
-        att_student_id = st.text_input("Enter Student ID to Mark Present")
-        mark_btn = st.form_submit_button("Mark Attendance")
+    st.markdown("### Manual Attendance Check-in")
+    with st.form("manual_attendance_form"):
+        manual_id = st.text_input("Enter Student ID to Check In")
+        manual_submit = st.form_submit_button("Check In Student")
         
-        if mark_btn:
-            if att_student_id:
+        if manual_submit:
+            if manual_id:
                 conn = get_db_connection()
                 if conn:
                     try:
                         cursor = conn.cursor()
-                        # Verify student exists first
-                        cursor.execute("SELECT full_name FROM students WHERE student_id = %s", (att_student_id,))
+                        cursor.execute("SELECT full_name FROM students WHERE student_id = %s", (manual_id,))
                         student = cursor.fetchone()
-                        
                         if student:
-                            cursor.execute("INSERT INTO attendance (student_id) VALUES (%s)", (att_student_id,))
+                            cursor.execute("INSERT INTO attendance (student_id) VALUES (%s)", (manual_id,))
                             conn.commit()
-                            st.success(f"Attendance marked successfully for {student[0]} (ID: {att_student_id})!")
+                            st.success(f"Manually checked in {student[0]} (ID: {manual_id})!")
                         else:
-                            st.error(f"Student ID '{att_student_id}' not found in registered database. Please register first.")
-                        
+                            st.error(f"Student ID '{manual_id}' not found. Please register the student first.")
                         cursor.close()
                         conn.close()
                     except mysql.connector.Error as err:
-                        st.error(f"Attendance Error: {err}")
+                        st.error(f"Database Error: {err}")
             else:
-                st.warning("Please enter a valid Student ID.")
+                st.warning("Please enter a Student ID.")
 
     if picture:
         bytes_data = picture.getvalue()
@@ -194,7 +198,7 @@ elif navigation == "Live Capture":
 # Session Reports View
 elif navigation == "Session Reports":
     st.title("Session Reports & Logs")
-    st.markdown("Export, view, or manage attendance logs.")
+    st.markdown("Export, view, or select multiple attendance logs to delete.")
     
     conn = get_db_connection()
     if conn:
@@ -207,32 +211,38 @@ elif navigation == "Session Reports":
             conn.close()
             
             if not df.empty:
-                st.dataframe(df, use_container_width=True)
                 csv = df.to_csv(index=False).encode('utf-8')
                 st.download_button("Download Report as CSV", data=csv, file_name="attendance_report.csv", mime="text/csv")
+                
+                st.markdown("### Select Attendance Logs to Delete")
+                with st.form("bulk_delete_attendance_form"):
+                    selected_logs = []
+                    for index, row in df.iterrows():
+                        is_checked = st.checkbox(f"Log ID: {row['id']} | Student: {row['full_name']} ({row['student_id']}) | Time: {row['timestamp']}", key=f"del_log_{row['id']}")
+                        if is_checked:
+                            selected_logs.append(row['id'])
+                    
+                    confirm_bulk_att = st.checkbox("I confirm I want to permanently delete the selected attendance log(s)")
+                    bulk_delete_att_btn = st.form_submit_button("Delete Selected Attendance Logs")
+                    
+                    if bulk_delete_att_btn:
+                        if confirm_bulk_att and selected_logs:
+                            conn = get_db_connection()
+                            if conn:
+                                try:
+                                    cursor = conn.cursor()
+                                    format_strings = ','.join(['%s'] * len(selected_logs))
+                                    cursor.execute(f"DELETE FROM attendance WHERE id IN ({format_strings})", tuple(selected_logs))
+                                    conn.commit()
+                                    cursor.close()
+                                    conn.close()
+                                    st.success(f"Successfully deleted {len(selected_logs)} attendance log(s)!")
+                                    st.rerun()
+                                except mysql.connector.Error as err:
+                                    st.error(f"Deletion Error: {err}")
+                        else:
+                            st.warning("Please select at least one log entry and check the confirmation box.")
             else:
-                st.info("No attendance logs available for export yet. Use Live Capture to log attendance.")
+                st.info("No attendance logs available yet. Use Live Capture or Manual Check-in to add records.")
         except Exception as e:
             st.error(f"Error generating report: {e}")
-
-    st.markdown("### Manage / Remove Attendance Logs")
-    with st.form("delete_attendance_form"):
-        log_id_to_delete = st.number_input("Enter Attendance Log ID to Delete", min_value=1, step=1)
-        confirm_del_attendance = st.checkbox("I confirm I want to permanently delete this attendance log")
-        del_attendance_btn = st.form_submit_button("Delete Attendance Log")
-        
-        if del_attendance_btn:
-            if confirm_del_attendance and log_id_to_delete:
-                conn = get_db_connection()
-                if conn:
-                    try:
-                        cursor = conn.cursor()
-                        cursor.execute("DELETE FROM attendance WHERE id = %s", (log_id_to_delete,))
-                        conn.commit()
-                        cursor.close()
-                        conn.close()
-                        st.success(f"Successfully deleted attendance log ID: {log_id_to_delete}!")
-                    except mysql.connector.Error as err:
-                        st.error(f"Deletion Error: {err}")
-            else:
-                st.warning("Please specify a valid Log ID and check the confirmation box.")
