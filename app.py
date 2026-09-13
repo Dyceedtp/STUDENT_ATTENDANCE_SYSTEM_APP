@@ -299,7 +299,8 @@ elif menu == "Session Reports":
         conn = get_db_connection()
         cursor = conn.cursor()
         cursor.execute("SELECT date, matric_number, course, time_in FROM attendance_records")
-        records = cursor.fetchall()        cursor.close()
+        records = cursor.fetchall()
+        cursor.close()
         conn.close()
         
         if records:
