@@ -1,6 +1,5 @@
 streamlit
 pandas
-mysql-connector-python
 mysql-connector-binary
 opencv-python-headless
 numpy
