@@ -18,64 +18,74 @@ def get_db_connection():
         port=3306
     )
 
-# Sidebar Navigation matching your project documentation
-st.sidebar.title("Polytechnic Portal")
-menu = st.sidebar.selectbox("Navigation", ["Dashboard", "Registration", "Live Capture", "Session Reports"])
+# Sidebar Navigation matching your live app
+st.sidebar.title("Polytechnic")
+st.sidebar.caption("INTELLIGENT ATTENDANCE v2.0")
+menu = st.sidebar.radio("Navigation", ["Dashboard", "Registration", "Live Capture", "Session Reports"])
 
 if menu == "Dashboard":
     st.title("Admin Dashboard")
-    st.write("Welcome to the Intelligent Student Attendance System. Use the sidebar to navigate between student biometric enrollment and real-time attendance tracking.")
+    st.write("Welcome to the Intelligent Student Attendance System dashboard.")
 
 elif menu == "Registration":
-    st.title("Student Biometric Enrollment")
+    st.title("Student Registration Portal")
+    st.write("Register new students, view the roster, or delete individual student records.")
     
-    # Form layout matching Figure 5.2 of your project documentation
+    # Registration Form matching your screenshot layout
     with st.form("registration_form"):
-        st.subheader("Registration Form")
-        
+        student_id = st.text_input("Student ID (e.g., STU002)")
         full_name = st.text_input("Full Name")
-        matric_number = st.text_input("Matriculation Number")
         
-        department = st.selectbox(
-            "Department",
-            ["Computer Science", "Information Technology", "Software Engineering", "Cybersecurity"]
-        )
-        
-        st.info("Facial Capture will use your camera to generate the biometric template.")
-        camera_image = st.camera_input("Capture Student Face Template")
-        
-        submit_button = st.form_submit_button("Complete Registration")
+        submit_button = st.form_submit_button("Register Student")
 
         if submit_button:
-            if full_name and matric_number and camera_image:
+            if student_id and full_name:
                 try:
                     conn = get_db_connection()
                     cursor = conn.cursor()
                     
-                    # Insert record into Aiven MySQL database
-                    query = """
-                        INSERT INTO students (full_name, matric_number, department) 
-                        VALUES (%s, %s, %s)
-                    """
-                    cursor.execute(query, (full_name, matric_number, department))
+                    # Insert into database (adjust column names to match your table)
+                    query = "INSERT INTO students (student_id, full_name) VALUES (%s, %s)"
+                    cursor.execute(query, (student_id, full_name))
                     conn.commit()
                     
                     cursor.close()
                     conn.close()
                     
-                    st.success(f"Successfully registered {full_name} ({matric_number})!")
+                    st.success(f"Successfully registered {full_name} (ID: {student_id})!")
                 except Exception as e:
                     st.error(f"Database Error: {e}")
             else:
-                st.warning("Please fill in all required fields and capture a facial image.")
+                st.warning("Please fill in both Student ID and Full Name.")
+
+    # Currently Registered Students Section
+    st.markdown("---")
+    st.subheader("Currently Registered Students")
+    
+    try:
+        conn = get_db_connection()
+        cursor = conn.cursor()
+        cursor.execute("SELECT student_id, full_name FROM students")
+        students = cursor.fetchall()
+        cursor.close()
+        conn.close()
+        
+        if students:
+            for s in students:
+                st.text(f"ID: {s[0]} | Name: {s[1]}")
+        else:
+            st.info("No students registered yet.")
+    except Exception as e:
+        st.write("Unable to load student roster at the moment.")
 
 elif menu == "Live Capture":
     st.title("Real-Time Attendance Capture")
-    st.info("The live OpenCV video feed and biometric face-matching stream will run here.")
-    # Placeholder for starting live stream session
-    if st.button("Start Attendance Session"):
-        st.warning("OpenCV live stream integration is ready to be initialized.")
+    st.info("Live camera stream and face recognition logic will execute here.")
 
 elif menu == "Session Reports":
-    st.title("Attendance Session Reports")
-    st.write("View logs, attendance history, and run natural language queries here.")
+    st.title("Session Reports")
+    st.write("Attendance logs and analytics reports.")
+
+# Logout button at the bottom of the sidebar
+if st.sidebar.button("Logout"):
+    st.sidebar.success("Logged out successfully.")
