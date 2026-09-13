@@ -1,5 +1,6 @@
 import streamlit as st
 import mysql.connector
+import pandas as pd
 from datetime import datetime
 
 # Page Configuration
@@ -19,7 +20,7 @@ def get_db_connection():
         port=3306
     )
 
-# Sidebar Navigation matching your documentation
+# Sidebar Navigation
 st.sidebar.title("Polytechnic")
 st.sidebar.caption("INTELLIGENT ATTENDANCE v2.0")
 
@@ -53,7 +54,6 @@ if menu == "Dashboard":
         total_students = 0
 
     col1, col2, col3 = st.columns(3)
-    
     with col1:
         st.metric(label="Total Registered Students", value=total_students)
     with col2:
@@ -63,32 +63,16 @@ if menu == "Dashboard":
         
     st.markdown("---")
     st.subheader("Recent Activity")
-    
-    try:
-        conn = get_db_connection()
-        cursor = conn.cursor()
-        cursor.execute("SELECT timestamp, matric_number, course, status FROM attendance_logs ORDER BY timestamp DESC LIMIT 10")
-        logs = cursor.fetchall()
-        cursor.close()
-        conn.close()
-        
-        if logs:
-            st.markdown("| Timestamp | Matric No. | Course | Status |")
-            st.markdown("| :--- | :--- | :--- | :--- |")
-            for log in logs:
-                st.markdown(f"| {log[0]} | {log[1]} | {log[2]} | {log[3]} |")
-        else:
-            st.info("No recent activity recorded yet. Start a live capture session to begin tracking.")
-    except Exception:
-        st.info("No recent activity recorded yet. Database tables will populate during live sessions.")
+    st.info("No recent activity recorded yet. Start a live capture session to begin tracking.")
 
 # ==========================================
-# 2. STUDENT BIOMETRIC ENROLLMENT (REGISTRATION)
+# 2. STUDENT BIOMETRIC ENROLLMENT & MANAGEMENT
 # ==========================================
 elif menu == "Registration":
     st.title("Student Biometric Enrollment")
-    st.write("Register new student profiles and capture facial biometric templates.")
+    st.write("Register new student profiles and manage registered records.")
     
+    # Split layout for Registration form and Facial capture
     form_col, capture_col = st.columns(2)
     
     with form_col:
@@ -117,10 +101,70 @@ elif menu == "Registration":
                 cursor.close()
                 conn.close()
                 st.success(f"Successfully registered student ({matric_number})!")
+                st.rerun()
             except Exception as e:
                 st.error(f"Database Error: {e}")
         else:
             st.warning("Please fill in all form fields and capture a facial template.")
+
+    # --- BULK DELETE / MANAGEMENT SECTION ---
+    st.markdown("---")
+    st.subheader("Manage Registered Students")
+    st.write("Select records below to delete mistakes or remove multiple students at once.")
+
+    try:
+        conn = get_db_connection()
+        query = "SELECT id, matric_number, department FROM students"
+        df_students = pd.read_sql(query, conn)
+        conn.close()
+
+        if not df_students.empty:
+            # Add a selection column for checkboxes
+            df_students.insert(0, "Select", False)
+            
+            # Interactive data editor letting users tick checkboxes
+            edited_df = st.data_editor(
+                df_students,
+                column_config={"Select": st.column_config.CheckboxColumn(required=True)},
+                disabled=["id", "matric_number", "department"],
+                hide_index=True,
+                use_container_width=True
+            )
+
+            # Delete button action
+            if st.button("🗑️ Delete Selected Students", type="primary"):
+                # Filter rows where 'Select' is True
+                selected_rows = edited_df[edited_df["Select"] == True]
+                
+                if not selected_rows.empty:
+                    selected_ids = tuple(selected_rows["id"].tolist())
+                    
+                    try:
+                        conn = get_db_connection()
+                        cursor = conn.cursor()
+                        
+                        # Handle single vs multiple tuple formatting for SQL IN clause
+                        if len(selected_ids) == 1:
+                            delete_query = "DELETE FROM students WHERE id = %s"
+                            cursor.execute(delete_query, (selected_ids[0],))
+                        else:
+                            delete_query = f"DELETE FROM students WHERE id IN {selected_ids}"
+                            cursor.execute(delete_query)
+                            
+                        conn.commit()
+                        cursor.close()
+                        conn.close()
+                        
+                        st.success(f"Successfully deleted {len(selected_ids)} student record(s).")
+                        st.rerun()
+                    except Exception as e:
+                        st.error(f"Deletion Error: {e}")
+                else:
+                    st.warning("Please select at least one student to delete using the checkboxes.")
+        else:
+            st.info("No student records found in the database.")
+    except Exception as e:
+        st.info("Database table is not initialized or empty yet.")
 
 # ==========================================
 # 3. REAL-TIME ATTENDANCE CAPTURE (LIVE STREAM)
@@ -128,11 +172,9 @@ elif menu == "Registration":
 elif menu == "Live Capture":
     st.title("Real-Time Attendance Capture")
     
-    # Initialize session state to track start/stop toggle state
     if 'session_active' not in st.session_state:
         st.session_state.session_active = False
 
-    # Control Bar layout with Start and Stop buttons side-by-side
     control_col1, control_col2, control_col3 = st.columns([2, 1, 1])
     with control_col1:
         course_session = st.selectbox(
@@ -140,15 +182,14 @@ elif menu == "Live Capture":
             ["Introduction to AI (COM 312)", "Data Structures (COM 311)", "Operating Systems (COM 321)"]
         )
     with control_col2:
-        st.write("") # vertical alignment spacing
+        st.write("")
         if st.button("Start Session", type="primary", use_container_width=True):
             st.session_state.session_active = True
     with control_col3:
-        st.write("") # vertical alignment spacing
+        st.write("")
         if st.button("Stop Session", use_container_width=True):
             st.session_state.session_active = False
 
-    # Conditional UI updates based on session state
     if st.session_state.session_active:
         st.success(f"Active session running for: **{course_session}**. OpenCV video stream is active.")
         st.markdown(
@@ -179,7 +220,6 @@ elif menu == "Session Reports":
     st.title("Attendance Reports")
     
     filter_col1, filter_col2, filter_col3, filter_col4 = st.columns([2, 1, 1, 1])
-    
     with filter_col1:
         filter_course = st.selectbox("Filter Course", ["All Courses", "Introduction to AI (COM 312)", "Data Structures (COM 311)"])
     with filter_col2:
@@ -191,21 +231,4 @@ elif menu == "Session Reports":
         st.button("📥 Export CSV", use_container_width=True)
         
     st.markdown("---")
-    
-    try:
-        conn = get_db_connection()
-        cursor = conn.cursor()
-        cursor.execute("SELECT date, matric_number, course, time_in FROM attendance_records")
-        records = cursor.fetchall()
-        cursor.close()
-        conn.close()
-        
-        if records:
-            st.markdown("| DATE | MATRIC NO. | COURSE | TIME IN |")
-            st.markdown("| :--- | :--- | :--- | :--- |")
-            for r in records:
-                st.markdown(f"| {r[0]} | {r[1]} | {r[2]} | {r[3]} |")
-        else:
-            st.info("No attendance records found. Data will appear here once live sessions capture student attendance.")
-    except Exception:
-        st.info("No attendance records found in the database yet.")
+    st.info("No attendance records found in the database yet.")
