@@ -21,11 +21,13 @@ def get_db_connection():
         ssl_disabled=False
     )
 
-# Force-create correct tables on startup
+# Self-healing database initialization
 def init_db():
     try:
         conn = get_db_connection()
         cursor = conn.cursor()
+        
+        # Create table if it doesn't exist at all
         cursor.execute("""
             CREATE TABLE IF NOT EXISTS students (
                 id INT AUTO_INCREMENT PRIMARY KEY,
@@ -33,6 +35,18 @@ def init_db():
                 department VARCHAR(100) NOT NULL
             )
         """)
+        
+        # Self-healing: Ensure required columns exist even if table was pre-existing
+        try:
+            cursor.execute("ALTER TABLE students ADD COLUMN matric_number VARCHAR(50) NOT NULL")
+        except Exception:
+            pass # Column already exists
+            
+        try:
+            cursor.execute("ALTER TABLE students ADD COLUMN department VARCHAR(100) NOT NULL")
+        except Exception:
+            pass # Column already exists
+
         cursor.execute("""
             CREATE TABLE IF NOT EXISTS attendance_logs (
                 id INT AUTO_INCREMENT PRIMARY KEY,
@@ -42,6 +56,7 @@ def init_db():
                 status VARCHAR(50) NOT NULL
             )
         """)
+        
         cursor.execute("""
             CREATE TABLE IF NOT EXISTS attendance_records (
                 id INT AUTO_INCREMENT PRIMARY KEY,
@@ -51,6 +66,7 @@ def init_db():
                 time_in TIME NOT NULL
             )
         """)
+        
         conn.commit()
         cursor.close()
         conn.close()
