@@ -10,17 +10,18 @@ st.set_page_config(
     layout="wide"
 )
 
-# Aiven MySQL Database Connection Function
+# Aiven MySQL Database Connection Function (Configured with your live credentials)
 def get_db_connection():
     return mysql.connector.connect(
-        host="your_aiven_host",
-        user="your_db_user",
-        password="your_db_password",
-        database="your_database_name",
-        port=3306
+        host="mysql-c346193-fawwazunusa-6c9b.e.aivencloud.com",
+        user="avnadmin",
+        password="AVNS_rI0ryEk9VWgFyEBLAWd",
+        database="defaultdb",
+        port=14852,
+        ssl_disabled=False
     )
 
-# Sidebar Navigation
+# Sidebar Navigation matching your documentation
 st.sidebar.title("Polytechnic")
 st.sidebar.caption("INTELLIGENT ATTENDANCE v2.0")
 
@@ -63,7 +64,24 @@ if menu == "Dashboard":
         
     st.markdown("---")
     st.subheader("Recent Activity")
-    st.info("No recent activity recorded yet. Start a live capture session to begin tracking.")
+    
+    try:
+        conn = get_db_connection()
+        cursor = conn.cursor()
+        cursor.execute("SELECT timestamp, matric_number, course, status FROM attendance_logs ORDER BY timestamp DESC LIMIT 10")
+        logs = cursor.fetchall()
+        cursor.close()
+        conn.close()
+        
+        if logs:
+            st.markdown("| Timestamp | Matric No. | Course | Status |")
+            st.markdown("| :--- | :--- | :--- | :--- |")
+            for log in logs:
+                st.markdown(f"| {log[0]} | {log[1]} | {log[2]} | {log[3]} |")
+        else:
+            st.info("No recent activity recorded yet. Start a live capture session to begin tracking.")
+    except Exception:
+        st.info("No recent activity recorded yet. Database tables will populate during live sessions.")
 
 # ==========================================
 # 2. STUDENT BIOMETRIC ENROLLMENT & MANAGEMENT
@@ -72,7 +90,6 @@ elif menu == "Registration":
     st.title("Student Biometric Enrollment")
     st.write("Register new student profiles and manage registered records.")
     
-    # Split layout for Registration form and Facial capture
     form_col, capture_col = st.columns(2)
     
     with form_col:
@@ -119,10 +136,8 @@ elif menu == "Registration":
         conn.close()
 
         if not df_students.empty:
-            # Add a selection column for checkboxes
             df_students.insert(0, "Select", False)
             
-            # Interactive data editor letting users tick checkboxes
             edited_df = st.data_editor(
                 df_students,
                 column_config={"Select": st.column_config.CheckboxColumn(required=True)},
@@ -131,9 +146,7 @@ elif menu == "Registration":
                 use_container_width=True
             )
 
-            # Delete button action
             if st.button("🗑️ Delete Selected Students", type="primary"):
-                # Filter rows where 'Select' is True
                 selected_rows = edited_df[edited_df["Select"] == True]
                 
                 if not selected_rows.empty:
@@ -143,7 +156,6 @@ elif menu == "Registration":
                         conn = get_db_connection()
                         cursor = conn.cursor()
                         
-                        # Handle single vs multiple tuple formatting for SQL IN clause
                         if len(selected_ids) == 1:
                             delete_query = "DELETE FROM students WHERE id = %s"
                             cursor.execute(delete_query, (selected_ids[0],))
@@ -163,7 +175,7 @@ elif menu == "Registration":
                     st.warning("Please select at least one student to delete using the checkboxes.")
         else:
             st.info("No student records found in the database.")
-    except Exception as e:
+    except Exception:
         st.info("Database table is not initialized or empty yet.")
 
 # ==========================================
@@ -182,11 +194,11 @@ elif menu == "Live Capture":
             ["Introduction to AI (COM 312)", "Data Structures (COM 311)", "Operating Systems (COM 321)"]
         )
     with control_col2:
-        st.write("")
+        st.write("") 
         if st.button("Start Session", type="primary", use_container_width=True):
             st.session_state.session_active = True
     with control_col3:
-        st.write("")
+        st.write("") 
         if st.button("Stop Session", use_container_width=True):
             st.session_state.session_active = False
 
@@ -231,4 +243,21 @@ elif menu == "Session Reports":
         st.button("📥 Export CSV", use_container_width=True)
         
     st.markdown("---")
-    st.info("No attendance records found in the database yet.")
+    
+    try:
+        conn = get_db_connection()
+        cursor = conn.cursor()
+        cursor.execute("SELECT date, matric_number, course, time_in FROM attendance_records")
+        records = cursor.fetchall()
+        cursor.close()
+        conn.close()
+        
+        if records:
+            st.markdown("| DATE | MATRIC NO. | COURSE | TIME IN |")
+            st.markdown("| :--- | :--- | :--- | :--- |")
+            for r in records:
+                st.markdown(f"| {r[0]} | {r[1]} | {r[2]} | {r[3]} |")
+        else:
+            st.info("No attendance records found. Data will appear here once live sessions capture student attendance.")
+    except Exception:
+        st.info("No attendance records found in the database yet.")
