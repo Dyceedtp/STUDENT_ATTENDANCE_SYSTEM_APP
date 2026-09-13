@@ -7,11 +7,7 @@ try:
         password="",
         database="attendance_db"
     )
-    
-    if db.is_connected():
-        print("Successfully connected to attendance_db!")
-        
+    print("Successfully connected to attendance_db!")
     db.close()
-
-except mysql.connector.Error as err:
+except Exception as err:
     print(f"Error connecting to database: {err}")
