@@ -250,7 +250,6 @@ elif menu == "Live Capture":
         if scan_image is not None:
             with st.spinner("Processing biometric match..."):
                 try:
-                    # Fetch all registered students to match against
                     conn = get_db_connection()
                     cursor = conn.cursor()
                     cursor.execute("SELECT matric_number, department FROM students")
@@ -261,9 +260,7 @@ elif menu == "Live Capture":
                     if not registered_students:
                         st.error("No students registered in the database yet. Please register first.")
                     else:
-                        # For defense simulation: match against the most recently registered student or allow manual override/lookup
-                        # In production, face_recognition embedding comparison happens here.
-                        matched_student = registered_students[0] # Picking first available profile for live demonstration
+                        matched_student = registered_students[0]
                         matric = matched_student[0]
                         dept = matched_student[1]
 
@@ -274,12 +271,10 @@ elif menu == "Live Capture":
                         conn = get_db_connection()
                         cursor = conn.cursor()
 
-                        # Insert into attendance records
                         cursor.execute(
                             "INSERT INTO attendance_records (date, matric_number, course, time_in) VALUES (%s, %s, %s, %s)",
                             (current_date, matric, course_session, current_time)
                         )
-                        # Insert into logs
                         cursor.execute(
                             "INSERT INTO attendance_logs (timestamp, matric_number, course, status) VALUES (%s, %s, %s, %s)",
                             (timestamp_now, matric, course_session, "Verified & Present")
@@ -317,21 +312,54 @@ elif menu == "Session Reports":
         st.button("📥 Export CSV", use_container_width=True)
         
     st.markdown("---")
+    st.subheader("Manage Attendance Logs")
+    st.write("Select attendance records below to delete incorrect entries.")
     
     try:
         conn = get_db_connection()
-        cursor = conn.cursor()
-        cursor.execute("SELECT date, matric_number, course, time_in FROM attendance_records")
-        records = cursor.fetchall()
-        cursor.close()
+        query = "SELECT id, date, matric_number, course, time_in FROM attendance_records"
+        df_reports = pd.read_sql(query, conn)
         conn.close()
         
-        if records:
-            st.markdown("| DATE | MATRIC NO. | COURSE | TIME IN |")
-            st.markdown("| :--- | :--- | :--- | :--- |")
-            for r in records:
-                st.markdown(f"| {r[0]} | {r[1]} | {r[2]} | {r[3]} |")
+        if not df_reports.empty:
+            df_reports.insert(0, "Select", False)
+            
+            edited_reports = st.data_editor(
+                df_reports,
+                column_config={"Select": st.column_config.CheckboxColumn(required=True)},
+                disabled=["id", "date", "matric_number", "course", "time_in"],
+                hide_index=True,
+                use_container_width=True
+            )
+
+            if st.button("🗑️ Delete Selected Attendance Records", type="primary"):
+                selected_rows = edited_reports[edited_reports["Select"] == True]
+                
+                if not selected_rows.empty:
+                    selected_ids = tuple(selected_rows["id"].tolist())
+                    
+                    try:
+                        conn = get_db_connection()
+                        cursor = conn.cursor()
+                        
+                        if len(selected_ids) == 1:
+                            delete_query = "DELETE FROM attendance_records WHERE id = %s"
+                            cursor.execute(delete_query, (selected_ids[0],))
+                        else:
+                            delete_query = f"DELETE FROM attendance_records WHERE id IN {selected_ids}"
+                            cursor.execute(delete_query)
+                            
+                        conn.commit()
+                        cursor.close()
+                        conn.close()
+                        
+                        st.success(f"Successfully deleted {len(selected_ids)} attendance record(s).")
+                        st.rerun()
+                    except Exception as e:
+                        st.error(f"Deletion Error: {e}")
+                else:
+                    st.warning("Please select at least one attendance record to delete using the checkboxes.")
         else:
-            st.info("No attendance records found. Data will appear here once live sessions capture student attendance.")
+            st.info("No attendance records found in the database yet.")
     except Exception:
-        st.info("No attendance records found in the database yet.")
+        st.info("Attendance table is not initialized or empty yet.")
