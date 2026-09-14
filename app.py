@@ -108,20 +108,52 @@ if menu == "Dashboard":
         
     st.markdown("---")
     st.subheader("Recent Activity")
+    st.write("Select activity logs below to delete unwanted entries.")
     
     try:
         conn = get_db_connection()
-        cursor = conn.cursor()
-        cursor.execute("SELECT timestamp, matric_number, course, status FROM attendance_logs ORDER BY timestamp DESC LIMIT 10")
-        logs = cursor.fetchall()
-        cursor.close()
+        query = "SELECT id, timestamp, matric_number, course, status FROM attendance_logs ORDER BY timestamp DESC LIMIT 10"
+        df_logs = pd.read_sql(query, conn)
         conn.close()
         
-        if logs:
-            st.markdown("| Timestamp | Matric No. | Course | Status |")
-            st.markdown("| :--- | :--- | :--- | :--- |")
-            for log in logs:
-                st.markdown(f"| {log[0]} | {log[1]} | {log[2]} | {log[3]} |")
+        if not df_logs.empty:
+            df_logs.insert(0, "Select", False)
+            
+            edited_logs = st.data_editor(
+                df_logs,
+                column_config={"Select": st.column_config.CheckboxColumn(required=True)},
+                disabled=["id", "timestamp", "matric_number", "course", "status"],
+                hide_index=True,
+                use_container_width=True
+            )
+
+            if st.button("🗑️ Delete Selected Activity Logs", type="primary"):
+                selected_rows = edited_logs[edited_logs["Select"] == True]
+                
+                if not selected_rows.empty:
+                    selected_ids = tuple(selected_rows["id"].tolist())
+                    
+                    try:
+                        conn = get_db_connection()
+                        cursor = conn.cursor()
+                        
+                        if len(selected_ids) == 1:
+                            delete_query = "DELETE FROM attendance_logs WHERE id = %s"
+                            cursor.execute(delete_query, (selected_ids[0],))
+                        else:
+                            delete_query = f"DELETE FROM attendance_logs WHERE id IN {selected_ids}"
+                            cursor.execute(delete_query)
+                            
+                        conn.commit()
+                        cursor.close()
+                        conn.close()
+                        
+                        st.success(f"Successfully deleted {len(selected_ids)} activity log(s).")
+                        st.rerun()
+                    except Exception as e:
+                        st.error(f"Deletion Error: {e}")
+                else:
+                    st.warning("Please select at least one activity log to delete using the checkboxes.")
         else:
             st.info("No recent activity recorded yet. Start a live capture session to begin tracking.")
     except Exception:
