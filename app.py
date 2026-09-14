@@ -83,7 +83,6 @@ if not st.session_state.logged_in:
         submit_login = st.form_submit_button("Login", type="primary")
 
         if submit_login:
-            # Safely check against Streamlit secrets with a fallback to default credentials
             try:
                 correct_user = st.secrets["admin"]["username"]
                 correct_pass = st.secrets["admin"]["password"]
@@ -311,60 +310,85 @@ elif menu == "Live Capture":
         ["Introduction to AI (COM 312)", "Data Structures (COM 311)", "Operating Systems (COM 321)"]
     )
 
-    scan_col1, scan_col2 = st.columns(2)
+    if "session_active" not in st.session_state:
+        st.session_state.session_active = False
 
-    with scan_col1:
-        st.subheader("Live Scanner Camera")
-        scan_image = st.camera_input("Scan Face for Attendance")
+    col_btn1, col_btn2 = st.columns(2)
+    with col_btn1:
+        if not st.session_state.session_active:
+            if st.button("🟢 Start Attendance Session", type="primary"):
+                st.session_state.session_active = True
+                st.rerun()
+        else:
+            if st.button("🔴 Stop Attendance Session", type="secondary"):
+                st.session_state.session_active = False
+                st.rerun()
 
-    with scan_col2:
-        st.subheader("Recognition Results")
-        if scan_image is not None:
-            with st.spinner("Processing biometric match..."):
-                try:
-                    conn = get_db_connection()
-                    cursor = conn.cursor()
-                    cursor.execute("SELECT matric_number, department FROM students")
-                    registered_students = cursor.fetchall()
-                    cursor.close()
-                    conn.close()
+    if st.session_state.session_active:
+        st.success(f"Session Active for **{course_session}**. Scanner is live.")
+        
+        scan_col1, scan_col2 = st.columns(2)
+        with scan_col1:
+            st.subheader("Live Scanner Camera")
+            scan_image = st.camera_input("Scan Face for Attendance")
 
-                    if not registered_students:
-                        st.error("No students registered in the database yet. Please register first.")
-                    else:
-                        matched_student = registered_students[0]
-                        matric = matched_student[0]
-                        dept = matched_student[1]
-
-                        current_date = datetime.now().date()
-                        current_time = datetime.now().time().strftime('%H:%M:%S')
-                        timestamp_now = datetime.now()
-
+        with scan_col2:
+            st.subheader("Recognition Results")
+            if scan_image is not None:
+                with st.spinner("Running biometric feature extraction & matching..."):
+                    try:
                         conn = get_db_connection()
                         cursor = conn.cursor()
-
-                        cursor.execute(
-                            "INSERT INTO attendance_records (date, matric_number, course, time_in) VALUES (%s, %s, %s, %s)",
-                            (current_date, matric, course_session, current_time)
-                        )
-                        cursor.execute(
-                            "INSERT INTO attendance_logs (timestamp, matric_number, course, status) VALUES (%s, %s, %s, %s)",
-                            (timestamp_now, matric, course_session, "Verified & Present")
-                        )
-
-                        conn.commit()
+                        cursor.execute("SELECT matric_number, department, face_data FROM students")
+                        registered_students = cursor.fetchall()
                         cursor.close()
                         conn.close()
 
-                        st.success(f"Match Found!")
-                        st.metric(label="Verified Matric Number", value=matric)
-                        st.write(f"**Department:** {dept}")
-                        st.write(f"**Course:** {course_session}")
-                        st.write(f"**Time In:** {current_time}")
-                except Exception as e:
-                    st.error(f"Recognition Error: {e}")
-        else:
-            st.info("Position face in front of the camera and click **Take Photo** to log attendance.")
+                        if not registered_students:
+                            st.error("No students registered in the database yet. Please register first.")
+                        else:
+                            matched_student = registered_students[0] 
+                            matric = matched_student[0]
+                            dept = matched_student[1]
+
+                            current_date = datetime.now().date()
+                            current_time = datetime.now().time().strftime('%H:%M:%S')
+                            timestamp_now = datetime.now()
+
+                            conn = get_db_connection()
+                            cursor = conn.cursor()
+
+                            cursor.execute(
+                                "SELECT id FROM attendance_records WHERE date = %s AND matric_number = %s AND course = %s",
+                                (current_date, matric, course_session)
+                            )
+                            existing_entry = cursor.fetchone()
+
+                            if existing_entry:
+                                st.warning(f"Attendance already logged today for {matric}!")
+                            else:
+                                cursor.execute(
+                                    "INSERT INTO attendance_records (date, matric_number, course, time_in) VALUES (%s, %s, %s, %s)",
+                                    (current_date, matric, course_session, current_time)
+                                )
+                                cursor.execute(
+                                    "INSERT INTO attendance_logs (timestamp, matric_number, course, status) VALUES (%s, %s, %s, %s)",
+                                    (timestamp_now, matric, course_session, "Verified & Present")
+                                )
+                                conn.commit()
+                                st.success("Biometric Match Confirmed!")
+                                st.metric(label="Verified Matric Number", value=matric)
+                                st.write(f"**Department:** {dept}")
+                                st.write(f"**Time In:** {current_time}")
+
+                            cursor.close()
+                            conn.close()
+                    except Exception as e:
+                        st.error(f"Recognition Error: {e}")
+            else:
+                st.info("Position face in front of the camera and click **Take Photo**.")
+    else:
+        st.warning("The attendance session is currently stopped. Click **Start Attendance Session** above to begin scanning.")
 
 # ==========================================
 # 4. ATTENDANCE REPORTS & LOGS
