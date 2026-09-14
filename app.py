@@ -11,6 +11,10 @@ st.set_page_config(
     layout="wide"
 )
 
+# Initialize Session State for Authentication
+if "logged_in" not in st.session_state:
+    st.session_state.logged_in = False
+
 # Aiven MySQL Database Connection using Streamlit Secrets
 def get_db_connection():
     return mysql.connector.connect(
@@ -65,6 +69,34 @@ def init_db():
 
 init_db()
 
+# ==========================================
+# LOGIN SCREEN
+# ==========================================
+if not st.session_state.logged_in:
+    st.title("🎓 Intelligent Student Attendance System")
+    st.subheader("Administrator Portal Login")
+    st.write("Please sign in with your administrator credentials to access the system.")
+
+    with st.form("login_form"):
+        username = st.text_input("Username", placeholder="admin")
+        password = st.text_input("Password", type="password", placeholder="••••••••")
+        submit_login = st.form_submit_button("Login", type="primary")
+
+        if submit_login:
+            # Default credentials for defense demonstration
+            if username == "admin" and password == "password123":
+                st.session_state.logged_in = True
+                st.success("Login successful! Loading system...")
+                st.rerun()
+            else:
+                st.error("Invalid username or password. Please try again.")
+    
+    st.stop()  # Halt execution of the rest of the app until logged in
+
+# ==========================================
+# MAIN APPLICATION (Post-Login)
+# ==========================================
+
 # Sidebar Navigation
 st.sidebar.title("Polytechnic")
 st.sidebar.caption("INTELLIGENT ATTENDANCE v2.0")
@@ -76,7 +108,8 @@ menu = st.sidebar.radio(
 
 st.sidebar.markdown("---")
 if st.sidebar.button("Logout"):
-    st.sidebar.success("Logged out successfully.")
+    st.session_state.logged_in = False
+    st.rerun()
 
 # ==========================================
 # 1. DASHBOARD / INSTITUTIONAL ANALYTICS
@@ -441,7 +474,6 @@ elif menu == "AI Assistant":
     st.subheader("Manage Chat History")
     st.write("Select question-and-answer pairs below to delete them together.")
 
-    # Parse message pairs (User Prompt + AI Response)
     turns = []
     idx = 0
     while idx < len(st.session_state.ai_messages):
@@ -482,7 +514,6 @@ elif menu == "AI Assistant":
             if not selected_rows.empty:
                 selected_turn_ids = selected_rows.index.tolist()
                 
-                # Gather all message indices to remove
                 indices_to_remove = set()
                 for t_id in selected_turn_ids:
                     turn = turns[t_id]
@@ -490,7 +521,6 @@ elif menu == "AI Assistant":
                     if turn["ai_idx"] is not None:
                         indices_to_remove.add(turn["ai_idx"])
                 
-                # Filter out the removed indices
                 st.session_state.ai_messages = [
                     msg for i, msg in enumerate(st.session_state.ai_messages) if i not in indices_to_remove
                 ]
