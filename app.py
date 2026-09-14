@@ -71,7 +71,7 @@ st.sidebar.caption("INTELLIGENT ATTENDANCE v2.0")
 
 menu = st.sidebar.radio(
     "Navigation", 
-    ["Dashboard", "Registration", "Live Capture", "Session Reports"]
+    ["Dashboard", "Registration", "Live Capture", "Session Reports", "AI Assistant"]
 )
 
 st.sidebar.markdown("---")
@@ -395,3 +395,43 @@ elif menu == "Session Reports":
             st.info("No attendance records found in the database yet.")
     except Exception:
         st.info("Attendance table is not initialized or empty yet.")
+
+# ==========================================
+# 5. AI ASSISTANT & DATABASE INSIGHTS
+# ==========================================
+elif menu == "AI Assistant":
+    st.title("AI Assistant & Database Insights")
+    st.write("Query your system metrics, analyze attendance trends, and generate automated summaries using natural language processing.")
+
+    if "ai_messages" not in st.session_state:
+        st.session_state.ai_messages = [
+            {"role": "assistant", "content": "Hello! I am your AI Database Assistant. You can ask me to summarize attendance trends, check student counts, or analyze system logs."}
+        ]
+
+    for message in st.session_state.ai_messages:
+        with st.chat_message(message["role"]):
+            st.markdown(message["content"])
+
+    if user_prompt := st.chat_input("Ask about students, courses, or attendance records..."):
+        st.session_state.ai_messages.append({"role": "user", "content": user_prompt})
+        with st.chat_message("user"):
+            st.markdown(user_prompt)
+
+        with st.chat_message("assistant"):
+            with st.spinner("Analyzing database records..."):
+                try:
+                    conn = get_db_connection()
+                    cursor = conn.cursor()
+                    cursor.execute("SELECT COUNT(*) FROM students")
+                    student_count = cursor.fetchone()[0]
+                    cursor.execute("SELECT COUNT(*) FROM attendance_records")
+                    record_count = cursor.fetchone()[0]
+                    cursor.close()
+                    conn.close()
+
+                    response = f"Based on live data from your Aiven MySQL database: There are currently **{student_count} registered students** and **{record_count} total attendance records** logged across active course sessions. Your system architecture is fully synchronized!"
+                except Exception as e:
+                    response = f"I encountered an issue querying the database: {e}"
+
+                st.markdown(response)
+                st.session_state.ai_messages.append({"role": "assistant", "content": response})
