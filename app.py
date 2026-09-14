@@ -21,22 +21,14 @@ def get_db_connection():
         ssl_disabled=False
     )
 
-# Clean database initialization with foreign key check bypass and image storage
+# Persistent database initialization (preserves registered student records)
 def init_db():
     try:
         conn = get_db_connection()
         cursor = conn.cursor()
         
-        # Disable foreign key checks to allow clean drops
-        cursor.execute("SET FOREIGN_KEY_CHECKS = 0;")
-        
-        cursor.execute("DROP TABLE IF EXISTS attendance")
-        cursor.execute("DROP TABLE IF EXISTS attendance_logs")
-        cursor.execute("DROP TABLE IF EXISTS attendance_records")
-        cursor.execute("DROP TABLE IF EXISTS students")
-        
         cursor.execute("""
-            CREATE TABLE students (
+            CREATE TABLE IF NOT EXISTS students (
                 id INT AUTO_INCREMENT PRIMARY KEY,
                 matric_number VARCHAR(50) NOT NULL,
                 department VARCHAR(100) NOT NULL,
@@ -45,7 +37,7 @@ def init_db():
         """)
         
         cursor.execute("""
-            CREATE TABLE attendance_logs (
+            CREATE TABLE IF NOT EXISTS attendance_logs (
                 id INT AUTO_INCREMENT PRIMARY KEY,
                 timestamp DATETIME DEFAULT CURRENT_TIMESTAMP,
                 matric_number VARCHAR(50) NOT NULL,
@@ -55,7 +47,7 @@ def init_db():
         """)
         
         cursor.execute("""
-            CREATE TABLE attendance_records (
+            CREATE TABLE IF NOT EXISTS attendance_records (
                 id INT AUTO_INCREMENT PRIMARY KEY,
                 date DATE NOT NULL,
                 matric_number VARCHAR(50) NOT NULL,
@@ -64,7 +56,6 @@ def init_db():
             )
         """)
         
-        cursor.execute("SET FOREIGN_KEY_CHECKS = 1;")
         conn.commit()
         cursor.close()
         conn.close()
@@ -142,7 +133,6 @@ elif menu == "Registration":
     st.title("Student Biometric Enrollment")
     st.write("Register new student profiles and manage registered records.")
     
-    # Using session state to hold the camera input across form submission
     if "camera_image" not in st.session_state:
         st.session_state.camera_image = None
 
@@ -166,7 +156,6 @@ elif menu == "Registration":
     if submit_button:
         if matric_number and department and st.session_state.camera_image:
             try:
-                # Read image bytes from the camera input
                 image_bytes = st.session_state.camera_image.getvalue()
                 
                 conn = get_db_connection()
