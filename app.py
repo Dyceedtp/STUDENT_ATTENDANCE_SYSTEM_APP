@@ -401,7 +401,7 @@ elif menu == "Session Reports":
 # ==========================================
 elif menu == "AI Assistant":
     st.title("AI Assistant & Database Insights")
-    st.write("Query your system metrics, analyze attendance trends, and generate automated summaries using natural language processing.")
+    st.write("Query your system metrics, analyze attendance trends, and manage chat history.")
 
     if "ai_messages" not in st.session_state:
         st.session_state.ai_messages = [
@@ -435,3 +435,68 @@ elif menu == "AI Assistant":
 
                 st.markdown(response)
                 st.session_state.ai_messages.append({"role": "assistant", "content": response})
+
+    # --- CHAT PAIR DELETION MANAGEMENT ---
+    st.markdown("---")
+    st.subheader("Manage Chat History")
+    st.write("Select question-and-answer pairs below to delete them together.")
+
+    # Parse message pairs (User Prompt + AI Response)
+    turns = []
+    idx = 0
+    while idx < len(st.session_state.ai_messages):
+        msg = st.session_state.ai_messages[idx]
+        if msg["role"] == "user":
+            user_text = msg["content"]
+            user_idx = idx
+            ai_text = ""
+            ai_idx = None
+            if idx + 1 < len(st.session_state.ai_messages) and st.session_state.ai_messages[idx + 1]["role"] == "assistant":
+                ai_text = st.session_state.ai_messages[idx + 1]["content"]
+                ai_idx = idx + 1
+            turns.append({
+                "turn_id": len(turns),
+                "user_idx": user_idx,
+                "ai_idx": ai_idx,
+                "User Prompt": user_text,
+                "AI Response": ai_text
+            })
+            idx += 2 if ai_idx is not None else 1
+        else:
+            idx += 1
+
+    if turns:
+        df_turns = pd.DataFrame(turns)
+        df_turns.insert(0, "Select", False)
+        
+        edited_turns = st.data_editor(
+            df_turns[["Select", "User Prompt", "AI Response"]],
+            column_config={"Select": st.column_config.CheckboxColumn(required=True)},
+            disabled=["User Prompt", "AI Response"],
+            hide_index=True,
+            use_container_width=True
+        )
+
+        if st.button("🗑️ Delete Selected Chat Pairs", type="primary"):
+            selected_rows = edited_turns[edited_turns["Select"] == True]
+            if not selected_rows.empty:
+                selected_turn_ids = selected_rows.index.tolist()
+                
+                # Gather all message indices to remove
+                indices_to_remove = set()
+                for t_id in selected_turn_ids:
+                    turn = turns[t_id]
+                    indices_to_remove.add(turn["user_idx"])
+                    if turn["ai_idx"] is not None:
+                        indices_to_remove.add(turn["ai_idx"])
+                
+                # Filter out the removed indices
+                st.session_state.ai_messages = [
+                    msg for i, msg in enumerate(st.session_state.ai_messages) if i not in indices_to_remove
+                ]
+                st.success(f"Successfully deleted {len(selected_turn_ids)} chat pair(s).")
+                st.rerun()
+            else:
+                st.warning("Please select at least one chat pair using the checkboxes.")
+    else:
+        st.info("No interactive chat turns to manage yet.")
