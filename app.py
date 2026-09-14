@@ -78,20 +78,27 @@ if not st.session_state.logged_in:
     st.write("Please sign in with your administrator credentials to access the system.")
 
     with st.form("login_form"):
-        username = st.text_input("Username", placeholder="admin")
-        password = st.text_input("Password", type="password", placeholder="••••••••")
+        username_input = st.text_input("Username", placeholder="admin")
+        password_input = st.text_input("Password", type="password", placeholder="••••••••")
         submit_login = st.form_submit_button("Login", type="primary")
 
         if submit_login:
-            # Default credentials for defense demonstration
-            if username == "admin" and password == "password123":
+            # Safely check against Streamlit secrets with a fallback to default credentials
+            try:
+                correct_user = st.secrets["admin"]["username"]
+                correct_pass = st.secrets["admin"]["password"]
+            except Exception:
+                correct_user = "admin"
+                correct_pass = "admin123"
+
+            if username_input == correct_user and password_input == correct_pass:
                 st.session_state.logged_in = True
                 st.success("Login successful! Loading system...")
                 st.rerun()
             else:
                 st.error("Invalid username or password. Please try again.")
     
-    st.stop()  # Halt execution of the rest of the app until logged in
+    st.stop()
 
 # ==========================================
 # MAIN APPLICATION (Post-Login)
